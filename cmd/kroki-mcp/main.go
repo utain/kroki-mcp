@@ -7,6 +7,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/pflag"
 	"github.com/utain/kroki-mcp/internal/config"
+	"github.com/utain/kroki-mcp/internal/kroki"
 	"github.com/utain/kroki-mcp/internal/mcp"
 )
 
@@ -34,7 +35,8 @@ func main() {
 		"serverPort", cfg.ServerPort,
 	)
 
-	kroki := mcp.NewKrokiMCPServer(&cfg)
+	krokiClient := kroki.NewKrokiClient(cfg.KrokiHost)
+	kroki := mcp.NewKrokiMCPServer(&cfg, krokiClient)
 	switch cfg.ServerMode {
 	case "stdio":
 		logger.Info("STDIO mode: reading diagram type and source from stdin")

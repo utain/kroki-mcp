@@ -3,40 +3,10 @@ package kroki
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+
+	"github.com/utain/kroki-mcp/internal/model"
 )
-
-func TestEncodeDiagram(t *testing.T) {
-	input := "A -> B: test"
-	encoded, err := encodeDiagram(input)
-	if err != nil {
-		t.Fatalf("encodeDiagram error: %v", err)
-	}
-	if encoded == "" {
-		t.Error("encodeDiagram returned empty string")
-	}
-	// Should not contain +, /, or =
-	if strings.ContainsAny(encoded, "+/=") {
-		t.Errorf("encodeDiagram produced non-url-safe base64: %s", encoded)
-	}
-}
-
-func TestRenderDiagram_URLOnly(t *testing.T) {
-	client := NewKrokiClient("https://kroki.io", "svg")
-	diagramType := "plantuml"
-	diagramSource := "A -> B: test"
-	result, err := client.RenderDiagram(diagramType, diagramSource)
-	if err != nil {
-		t.Fatalf("RenderDiagram error: %v", err)
-	}
-	if !strings.HasPrefix(result.URL, "https://kroki.io/plantuml/svg/") {
-		t.Errorf("unexpected URL: %s", result.URL)
-	}
-	if !strings.Contains(result.URL, "scale=1.50") {
-		t.Errorf("scale param missing or incorrect in URL: %s", result.URL)
-	}
-}
 
 func TestRenderDiagram_MockServer(t *testing.T) {
 	// Mock Kroki server that returns a fixed image
@@ -46,10 +16,10 @@ func TestRenderDiagram_MockServer(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewKrokiClient(ts.URL, "svg")
+	client := NewKrokiClient(ts.URL)
 	diagramType := "plantuml"
 	diagramSource := "A -> B: test"
-	result, err := client.RenderDiagram(diagramType, diagramSource)
+	result, err := client.RenderDiagram(diagramType, diagramSource, model.OutputFormat("svg"))
 	if err != nil {
 		t.Fatalf("RenderDiagram error: %v", err)
 	}

@@ -3,6 +3,7 @@ package mcp
 import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/utain/kroki-mcp/internal/config"
+	"github.com/utain/kroki-mcp/internal/kroki"
 )
 
 type DiagramRequest struct {
@@ -17,17 +18,19 @@ type DiagramResponse struct {
 	URL          string `json:"url"`
 }
 type KrokiMCPServer struct {
-	mcp *server.MCPServer
-	cfg *config.Config
+	mcp         *server.MCPServer
+	krokiClient *kroki.KrokiClient
+	cfg         *config.Config
 }
 
-func NewKrokiMCPServer(cfg *config.Config) *KrokiMCPServer {
+func NewKrokiMCPServer(cfg *config.Config, krokiClient *kroki.KrokiClient) *KrokiMCPServer {
 	server := server.NewMCPServer(
-		"Kroki-MCP",
+		"Kroki MCP Server",
 		"1.0.0",
+		server.WithLogging(),
 	)
 
-	return &KrokiMCPServer{mcp: server, cfg: cfg}
+	return &KrokiMCPServer{mcp: server, cfg: cfg, krokiClient: krokiClient}
 }
 
 func (s *KrokiMCPServer) Handler() *server.MCPServer {
@@ -37,5 +40,6 @@ func (s *KrokiMCPServer) Handler() *server.MCPServer {
 
 	// Register the diagram generation tool
 	s.RegisterGenerateDiagramTool()
+	s.RegisterGetDiagramURLTool()
 	return s.mcp
 }

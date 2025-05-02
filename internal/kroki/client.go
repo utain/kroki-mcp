@@ -16,14 +16,12 @@ import (
 )
 
 type KrokiClient struct {
-	Host   string
-	Format model.OutputFormat
+	Host string
 }
 
 type KrokiResult struct {
-	ImageContent []byte `json:"-"`   // The image content in base64 format
-	URL          string `json:"url"` // The direct URL to the image
-	MIMEType     string `json:"mimeType"`
+	ImageContent []byte `json:"-"` // The image content in base64 format
+	MIMEType     string `json:"-"`
 }
 
 // krokiRequest represents the request body for the Kroki API.
@@ -34,10 +32,9 @@ type krokiRequest struct {
 	DiagramOptions map[string]string `json:"diagram_options"`
 }
 
-func NewKrokiClient(host string, format model.OutputFormat) *KrokiClient {
+func NewKrokiClient(host string) *KrokiClient {
 	return &KrokiClient{
-		Host:   host,
-		Format: format,
+		Host: host,
 	}
 }
 
@@ -59,7 +56,7 @@ func (kc *KrokiClient) encodeDiagram(diagramSource string) (string, error) {
 }
 
 // RenderDiagram sends diagram code to the Kroki server and returns both image base64 and a direct URL.
-func (kc *KrokiClient) RenderDiagram(diagramType, diagramSource string) (*KrokiResult, error) {
+func (kc *KrokiClient) RenderDiagram(diagramType, diagramSource string, format model.OutputFormat) (*KrokiResult, error) {
 	u, err := url.Parse(kc.Host)
 	if err != nil {
 		slog.Error("Invalid Kroki host URL", "host", kc.Host, "error", err)
@@ -70,7 +67,7 @@ func (kc *KrokiClient) RenderDiagram(diagramType, diagramSource string) (*KrokiR
 	err = json.NewEncoder(&buf).Encode(&krokiRequest{
 		DiagramSource:  diagramSource,
 		DiagramType:    diagramType,
-		OutputFormat:   string(kc.Format),
+		OutputFormat:   string(format),
 		DiagramOptions: map[string]string{},
 	})
 	if err != nil {
@@ -98,26 +95,20 @@ func (kc *KrokiClient) RenderDiagram(diagramType, diagramSource string) (*KrokiR
 		slog.Error("Kroki request failed", "status", resp.StatusCode, "body", string(body))
 		return nil, fmt.Errorf("kroki error: %s", string(body))
 	}
-	img, err := io.ReadAll(resp.Body)
+	imageContent, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
-	}
-
-	// Generate direct GET URL
-	rawURL, err := kc.getDiagramURL(diagramType, diagramSource)
-	if err != nil {
-		slog.Error("Failed to generate Kroki URL", "error", err)
 		return nil, err
 	}
 
 	return &KrokiResult{
-		ImageContent: img,
-		URL:          rawURL, // Updated to use rawURL instead of getU.String()
-		MIMEType:     kc.Format.MIMEType(),
+		ImageContent: imageContent,
+		MIMEType:     format.MIMEType(),
 	}, nil
 }
 
-func (kc *KrokiClient) getDiagramURL(diagramType, diagramSource string) (string, error) {
+// GetDiagramURL generates a URL for the Kroki API to fetch the diagram.
+// It encodes the diagram source and appends it to the Kroki host URL.
+func (kc *KrokiClient) GetDiagramURL(diagramType, diagramSource string, format model.OutputFormat) (string, error) {
 	encoded, err := kc.encodeDiagram(diagramSource)
 	if err != nil {
 		slog.Error("Failed to encode diagram source", "error", err)
@@ -128,6 +119,6 @@ func (kc *KrokiClient) getDiagramURL(diagramType, diagramSource string) (string,
 		slog.Error("Invalid Kroki host URL", "host", kc.Host, "error", err)
 		return "", err
 	}
-	u.Path = fmt.Sprintf("/%s/%s/%s", diagramType, string(kc.Format), encoded)
+	u.Path = fmt.Sprintf("/%s/%s/%s", diagramType, string(format), encoded)
 	return u.String(), nil
 }

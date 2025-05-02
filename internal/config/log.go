@@ -11,11 +11,11 @@ func InitLogger(level, format string) *slog.Logger {
 
 	switch strings.ToLower(format) {
 	case "json":
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 			Level: parseLevel(level),
 		})
 	default:
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 			Level: parseLevel(level),
 		})
 	}
