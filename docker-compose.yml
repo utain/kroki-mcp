@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   kroki:
-    image: yannh/kroki
+    image: yuzutech/kroki
     container_name: kroki-server
     ports:
       - "8000:8000"
@@ -18,4 +16,4 @@ services:
       - "5090:5090"
     depends_on:
       - kroki
-    command: ["--kroki-host", "http://kroki:8000", "--port", "5090"]
+    command: [ "-m", "sse","--kroki-host", "http://kroki:8000", "--port", "5090", "--host", "0.0.0.0" ]
