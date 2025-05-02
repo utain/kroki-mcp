@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kroki-mcp": {
+      "command": "go",
+      "args": [
+        "run",
+        "cmd/kroki-mcp/main.go"
+      ]
+    }
+  }
+}

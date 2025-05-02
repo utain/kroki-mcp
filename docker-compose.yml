@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  kroki:
+    image: yannh/kroki
+    container_name: kroki-server
+    ports:
+      - "8000:8000"
+
+  kroki-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kroki-mcp
+    environment:
+      - KROKI_HOST=http://kroki:8000
+    ports:
+      - "5090:5090"
+    depends_on:
+      - kroki
+    command: ["--kroki-host", "http://kroki:8000", "--port", "5090"]

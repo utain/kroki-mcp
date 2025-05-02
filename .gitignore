@@ -1,0 +1,38 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Output of the go coverage tool
+*.coverprofile
+*.cov
+*.coverage
+
+# Dependency directories (vendor/)
+vendor/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# IDE/editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+*.sock
+
+# Build artifacts
+/dist
+/build
