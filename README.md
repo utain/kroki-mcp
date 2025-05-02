@@ -1,5 +1,12 @@
 # Kroki-MCP
 
+[![CI](https://github.com/utain/kroki-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/utain/kroki-mcp/actions/workflows/ci.yml)
+[![Go Version](https://img.shields.io/badge/go-1.22-blue)](https://golang.org/dl/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+<!-- Uncomment and update if Docker image is published
+[![Docker Pulls](https://img.shields.io/docker/pulls/utain/kroki-mcp)](https://hub.docker.com/r/utain/kroki-mcp)
+-->
+
 Kroki-MCP is a command-line tool and MCP integration for converting textual diagrams (e.g., PlantUML, Mermaid) into images using a Kroki backend. It supports both local and remote Kroki servers, with flexible configuration and multiple output formats.
 
 ## Features
@@ -118,6 +125,14 @@ docker-compose up --build
 ## Contributing
 
 Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to contribute to this project.
+
+## Related Projects
+
+- [Kroki](https://kroki.io/)
+- [PlantUML](https://plantuml.com/)
+- [Mermaid](https://mermaid-js.github.io/)
+- [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol)
+- [mcp-go](https://github.com/mark3labs/mcp-go)
 
 ## License
 
