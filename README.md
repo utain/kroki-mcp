@@ -80,7 +80,7 @@ kroki-mcp/
 To run Kroki-MCP as an MCP server from source:
 
 ```sh
-go run github.com/utain/kroki-mcp/cmd/kroki-mcp --mode sse --format png --kroki-host https://kroki.io
+go run github.com/utain/kroki-mcp/cmd/kroki-mcp@latest --mode sse --format png --kroki-host https://kroki.io
 ```
 
 You can configure the MCP server in your MCP configuration file as follows:
@@ -92,7 +92,7 @@ You can configure the MCP server in your MCP configuration file as follows:
       "command": "go",
       "args": [
         "run",
-        "github.com/utain/kroki-mcp/cmd/kroki-mcp",
+        "github.com/utain/kroki-mcp/cmd/kroki-mcp@latest",
         "-m", "stdio",
         "-f", "png",
         "--kroki-host", "https://kroki.io"
