@@ -27,7 +27,6 @@ func NewKrokiMCPServer(cfg *config.Config, krokiClient *kroki.KrokiClient) *Krok
 	server := server.NewMCPServer(
 		"Kroki MCP Server",
 		"1.0.0",
-		server.WithLogging(),
 	)
 
 	return &KrokiMCPServer{mcp: server, cfg: cfg, krokiClient: krokiClient}
