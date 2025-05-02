@@ -126,6 +126,10 @@ docker-compose up --build
 
 Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to contribute to this project.
 
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for release history.
+
 ## Related Projects
 
 - [Kroki](https://kroki.io/)
