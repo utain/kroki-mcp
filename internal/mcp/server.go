@@ -26,7 +26,7 @@ type KrokiMCPServer struct {
 func NewKrokiMCPServer(cfg *config.Config, krokiClient *kroki.KrokiClient) *KrokiMCPServer {
 	server := server.NewMCPServer(
 		"Kroki MCP Server",
-		"1.0.0",
+		"2.0.0",
 	)
 
 	return &KrokiMCPServer{mcp: server, cfg: cfg, krokiClient: krokiClient}
