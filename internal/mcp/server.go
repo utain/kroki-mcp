@@ -36,9 +36,11 @@ func (s *KrokiMCPServer) Handler() *server.MCPServer {
 	// Register the diagram types and output formats resources
 	s.RegisterDiagramTypesResource()
 	s.RegisterOutputFormatsResource()
+	s.RegisterRecommendedDPIList()
 
 	// Register the diagram generation tool
 	s.RegisterGenerateDiagramTool()
+	s.RegisterGeneratePNGDiagramWithCustomDPITool()
 	s.RegisterGetDiagramURLTool()
 	return s.mcp
 }

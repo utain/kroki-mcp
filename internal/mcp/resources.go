@@ -51,3 +51,25 @@ func (s *KrokiMCPServer) RegisterOutputFormatsResource() {
 		}, nil
 	})
 }
+
+func (s *KrokiMCPServer) RegisterRecommendedDPIList() {
+	resource := mcp.NewResource(
+		"diagrams://dpi-list",
+		"Recommended DPI list good for generate diagram image",
+		mcp.WithResourceDescription("List recommended DPI for generate diagram image"),
+		mcp.WithMIMEType("application/json"),
+	)
+	s.mcp.AddResource(resource, func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		data, err := json.Marshal(model.RecommendedDPIList)
+		if err != nil {
+			return nil, err
+		}
+		return []mcp.ResourceContents{
+			mcp.TextResourceContents{
+				URI:      "diagrams://dpi-list",
+				MIMEType: "application/json",
+				Text:     string(data),
+			},
+		}, nil
+	})
+}
