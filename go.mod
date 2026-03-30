@@ -1,6 +1,6 @@
 module github.com/utain/kroki-mcp
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/mark3labs/mcp-go v0.25.0
@@ -33,9 +33,9 @@ require (
 	github.com/tdewolff/parse/v2 v2.7.23 // indirect
 	github.com/wcharczuk/go-chart/v2 v2.1.2 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/image v0.26.0 // indirect
+	golang.org/x/image v0.38.0 // indirect
 	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
 	gonum.org/v1/plot v0.16.0 // indirect
 	modernc.org/knuth v0.5.5 // indirect
 	modernc.org/token v1.1.0 // indirect
