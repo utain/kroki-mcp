@@ -14,6 +14,40 @@ import (
 	"github.com/utain/kroki-mcp/internal/svgconv"
 )
 
+// defaultDPI is the single source of truth for the DPI used by
+// generate_png_diagram_with_custom_dpi when the caller omits the argument.
+// The tool schema advertises the same value via mcp.DefaultNumber.
+const defaultDPI = 150
+
+// parseDiagramArgs validates the shared tool arguments and returns them
+// normalized to lowercase (except source). A non-nil errResult must be
+// returned to the client as-is.
+func parseDiagramArgs(req mcp.CallToolRequest, needsFormat bool) (diagramType, source, format string, errResult *mcp.CallToolResult) {
+	rawDiagramType := req.GetString("diagramType", "")
+	diagramType = strings.ToLower(rawDiagramType)
+	if !slices.Contains(model.SupportedDiagramTypes, diagramType) {
+		slog.Error("Invalid diagramType value", "diagramType", rawDiagramType)
+		return "", "", "", mcp.NewToolResultError("diagramType is required and must be a non-empty string")
+	}
+
+	source = req.GetString("source", "")
+	if source == "" {
+		slog.Error("Invalid source value", "source", source)
+		return "", "", "", mcp.NewToolResultError("source is required and must be a non-empty string")
+	}
+
+	if needsFormat {
+		rawFormat := req.GetString("format", "")
+		format = strings.ToLower(rawFormat)
+		if !slices.Contains(model.SupportedOutputFormats, format) {
+			slog.Error("Invalid format value", "format", rawFormat)
+			return "", "", "", mcp.NewToolResultError("format is required and must be one of: png, svg")
+		}
+	}
+
+	return diagramType, source, format, nil
+}
+
 func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 	tool := mcp.NewTool("generate_diagram",
 		mcp.WithDescription("Generate a diagram image and URL from textual code using Kroki."),
@@ -32,25 +66,19 @@ func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 			mcp.Enum(model.SupportedOutputFormats...),
 			mcp.DefaultString("png"),
 		),
+		mcp.WithToolAnnotation(mcp.ToolAnnotation{
+			Title:           "Generate diagram image from source",
+			ReadOnlyHint:    mcp.ToBoolPtr(true),
+			DestructiveHint: mcp.ToBoolPtr(false),
+			IdempotentHint:  mcp.ToBoolPtr(true),
+			OpenWorldHint:   mcp.ToBoolPtr(true),
+		}),
 	)
 
 	s.mcp.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		diagramType, _ := req.Params.Arguments["diagramType"].(string)
-		if !slices.Contains(model.SupportedDiagramTypes, strings.ToLower(diagramType)) {
-			slog.Error("Invalid diagramType value", "diagramType", diagramType)
-			return mcp.NewToolResultError("diagramType is required and must be a non-empty string"), nil
-		}
-
-		source, ok := req.Params.Arguments["source"].(string)
-		if !ok || source == "" {
-			slog.Error("Invalid source value", "source", source)
-			return mcp.NewToolResultError("source is required and must be a non-empty string"), nil
-		}
-
-		format, _ := req.Params.Arguments["format"].(string)
-		if !slices.Contains(model.SupportedOutputFormats, strings.ToLower(format)) {
-			slog.Error("Invalid format value", "format", format)
-			return mcp.NewToolResultError("format is required and must be one of: png, svg, txt, utxt"), nil
+		diagramType, source, format, errResult := parseDiagramArgs(req, true)
+		if errResult != nil {
+			return errResult, nil
 		}
 
 		result, err := s.krokiClient.RenderDiagram(diagramType, source, model.OutputFormat(format))
@@ -59,7 +87,7 @@ func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		switch model.OutputFormat(strings.ToLower(format)) {
+		switch model.OutputFormat(format) {
 		case model.PNG:
 			data := base64.StdEncoding.EncodeToString(result.ImageContent)
 			return &mcp.CallToolResult{
@@ -111,30 +139,17 @@ func (s *KrokiMCPServer) RegisterGetDiagramURLTool() {
 		),
 		mcp.WithToolAnnotation(mcp.ToolAnnotation{
 			Title:           "Generate diagram URL from source",
-			ReadOnlyHint:    true,
-			DestructiveHint: false,
-			IdempotentHint:  false,
-			OpenWorldHint:   true,
+			ReadOnlyHint:    mcp.ToBoolPtr(true),
+			DestructiveHint: mcp.ToBoolPtr(false),
+			IdempotentHint:  mcp.ToBoolPtr(true),
+			OpenWorldHint:   mcp.ToBoolPtr(true),
 		}),
 	)
 
 	s.mcp.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		diagramType, _ := req.Params.Arguments["diagramType"].(string)
-		if !slices.Contains(model.SupportedDiagramTypes, strings.ToLower(diagramType)) {
-			slog.Error("Invalid diagramType value", "diagramType", diagramType)
-			return mcp.NewToolResultError("diagramType is required and must be a non-empty string"), nil
-		}
-
-		source, ok := req.Params.Arguments["source"].(string)
-		if !ok || source == "" {
-			slog.Error("Invalid source value", "source", source)
-			return mcp.NewToolResultError("source is required and must be a non-empty string"), nil
-		}
-
-		format, _ := req.Params.Arguments["format"].(string)
-		if !slices.Contains(model.SupportedOutputFormats, strings.ToLower(format)) {
-			slog.Error("Invalid format value", "format", format)
-			return mcp.NewToolResultError("format is required and must be one of: png, svg, txt, utxt"), nil
+		diagramType, source, format, errResult := parseDiagramArgs(req, true)
+		if errResult != nil {
+			return errResult, nil
 		}
 
 		rawURL, err := s.krokiClient.GetDiagramURL(diagramType, source, model.OutputFormat(format))
@@ -167,26 +182,34 @@ func (s *KrokiMCPServer) RegisterGeneratePNGDiagramWithCustomDPITool() {
 			mcp.Description("The textual diagram source code"),
 		),
 		mcp.WithNumber("dpi",
-			mcp.Description("Output dots per inch (DPI) for the PNG image from 72 to 240"),
-			mcp.DefaultNumber(150),
+			mcp.Description("Output dots per inch (DPI) for the PNG image from 72 to 300"),
+			mcp.DefaultNumber(defaultDPI),
 		),
+		mcp.WithToolAnnotation(mcp.ToolAnnotation{
+			Title:           "Generate high-DPI PNG diagram from source",
+			ReadOnlyHint:    mcp.ToBoolPtr(true),
+			DestructiveHint: mcp.ToBoolPtr(false),
+			IdempotentHint:  mcp.ToBoolPtr(true),
+			OpenWorldHint:   mcp.ToBoolPtr(true),
+		}),
 	)
 
 	s.mcp.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		diagramType, _ := req.Params.Arguments["diagramType"].(string)
-		if !slices.Contains(model.SupportedDiagramTypes, strings.ToLower(diagramType)) {
-			slog.Error("Invalid diagramType value", "diagramType", diagramType)
-			return mcp.NewToolResultError("diagramType is required and must be a non-empty string"), nil
+		diagramType, source, _, errResult := parseDiagramArgs(req, false)
+		if errResult != nil {
+			return errResult, nil
 		}
 
-		source, ok := req.Params.Arguments["source"].(string)
-		if !ok || source == "" {
-			slog.Error("Invalid source value", "source", source)
-			return mcp.NewToolResultError("source is required and must be a non-empty string"), nil
+		dpi := float64(defaultDPI)
+		if _, present := req.GetArguments()["dpi"]; present {
+			var err error
+			dpi, err = req.RequireFloat("dpi")
+			if err != nil {
+				slog.Error("Invalid DPI value", "error", err)
+				return mcp.NewToolResultError("dpi must be a number"), nil
+			}
 		}
-
-		dpi, _ := req.Params.Arguments["dpi"].(float64)
-		if dpi < 1 || dpi > 300 {
+		if dpi < 72 || dpi > 300 {
 			slog.Error("Invalid DPI value", "dpi", dpi)
 			return mcp.NewToolResultError("DPI must be between 72 and 300"), nil
 		}

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -40,7 +42,13 @@ func main() {
 	switch cfg.ServerMode {
 	case "stdio":
 		logger.Info("STDIO mode: reading diagram type and source from stdin")
-		server.ServeStdio(kroki.Handler())
+		// ServeStdio installs its own SIGTERM/SIGINT handler and cancels the
+		// listen context on signal, so a graceful shutdown surfaces as
+		// context.Canceled rather than a real failure.
+		if err := server.ServeStdio(kroki.Handler()); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("STDIO server error", "error", err)
+			os.Exit(1)
+		}
 	default:
 		logger.Info("SSE mode: starting SSE server")
 		sseServer := server.NewSSEServer(kroki.Handler())
