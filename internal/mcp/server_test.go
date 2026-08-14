@@ -86,6 +86,13 @@ func newGuardedKrokiHost(t *testing.T) string {
 // tool handlers forwarded.
 func newStubKrokiHost(t *testing.T) (string, *stubKrokiRecorder) {
 	t.Helper()
+	return newStubKrokiHostServing(t, stubSVG)
+}
+
+// newStubKrokiHostServing is newStubKrokiHost with a caller-chosen SVG body,
+// for tests that need realistic Kroki output rather than the minimal stubSVG.
+func newStubKrokiHostServing(t *testing.T, svgBody string) (string, *stubKrokiRecorder) {
+	t.Helper()
 	recorder := &stubKrokiRecorder{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body krokiRequestBody
@@ -96,7 +103,7 @@ func newStubKrokiHost(t *testing.T) (string, *stubKrokiRecorder) {
 
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(stubSVG)); err != nil {
+		if _, err := w.Write([]byte(svgBody)); err != nil {
 			t.Errorf("failed to write stub SVG response: %v", err)
 		}
 	}))
@@ -417,8 +424,8 @@ func TestReadResource_DiagramTypes(t *testing.T) {
 }
 
 // 7. generate_diagram happy path against a stub Kroki host. Besides asserting
-// a non-error image result, this locks the lowercase-normalization fix end to
-// end: mixed-case diagramType/format arguments must reach Kroki lowercased.
+// a non-error SVG text result, this locks the lowercase-normalization fix end
+// to end: mixed-case diagramType/format arguments must reach Kroki lowercased.
 func TestCallTool_GenerateDiagram_MixedCaseArgsForwardedLowercase(t *testing.T) {
 	host, recorder := newStubKrokiHost(t)
 	mcpServer := newTestServerWithHost(t, host)
@@ -440,12 +447,9 @@ func TestCallTool_GenerateDiagram_MixedCaseArgsForwardedLowercase(t *testing.T) 
 		t.Fatalf("unexpected error result: %s", firstTextContent(t, result))
 	}
 
-	image, data := firstImageContent(t, result)
-	if image.MIMEType != "image/svg+xml" {
-		t.Errorf("MIMEType = %q, want %q", image.MIMEType, "image/svg+xml")
-	}
-	if !strings.Contains(string(data), "<svg") {
-		t.Errorf("decoded content does not look like SVG: %q", string(data))
+	svg := firstTextContent(t, result)
+	if !strings.Contains(svg, "<svg") {
+		t.Errorf("text content does not look like SVG: %q", svg)
 	}
 
 	got := recorder.only(t)
@@ -625,5 +629,51 @@ func TestCallTool_GeneratePNGDiagramWithCustomDPI_DPIWrongType(t *testing.T) {
 				t.Errorf("error message = %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+// 12. generate_diagram with format=svg must return SVG normalized for inline
+// chat rendering: no hardcoded background on the root element (it breaks dark
+// mode), width="100%" plus a viewBox instead of fixed pixel sizing, and no
+// preserveAspectRatio="none". The stub serves a root tag copied from real
+// PlantUML output via Kroki, which has all three problems.
+func TestCallTool_GenerateDiagram_SVGNormalizedForInline(t *testing.T) {
+	const krokiStyledSVG = `<svg xmlns="http://www.w3.org/2000/svg" data-diagram-type="SEQUENCE" height="210" preserveAspectRatio="none" style="width:198px;height:210px;background:#FFFFFF;" viewBox="0 0 198 210" width="198" zoomAndPan="magnify"><g><rect fill="#E2E2F0" height="30" width="50" x="10" y="10"/><text fill="#181818" x="12" y="25">Alice</text></g></svg>`
+
+	host, _ := newStubKrokiHostServing(t, krokiStyledSVG)
+	mcpServer := newTestServerWithHost(t, host)
+	c, _ := newInitializedClient(t, mcpServer)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Name = "generate_diagram"
+	req.Params.Arguments = map[string]any{
+		"diagramType": "plantuml",
+		"source":      "@startuml\nAlice -> Bob: hi\n@enduml",
+		"format":      "svg",
+	}
+
+	result, err := c.CallTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result: %s", firstTextContent(t, result))
+	}
+
+	svg := firstTextContent(t, result)
+	if !strings.Contains(svg, "<svg") {
+		t.Fatalf("result does not look like SVG: %q", svg)
+	}
+	if strings.Contains(svg, "background") {
+		t.Errorf("returned SVG still has a hardcoded background: %q", svg)
+	}
+	if !strings.Contains(svg, `width="100%"`) {
+		t.Errorf("returned SVG missing width=\"100%%\": %q", svg)
+	}
+	if !strings.Contains(svg, `viewBox="0 0 198 210"`) {
+		t.Errorf("returned SVG missing its viewBox: %q", svg)
+	}
+	if strings.Contains(svg, `preserveAspectRatio="none"`) {
+		t.Errorf("returned SVG still disables proportional scaling: %q", svg)
 	}
 }

@@ -62,9 +62,9 @@ func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 		),
 		mcp.WithString("format",
 			mcp.Required(),
-			mcp.Description("Output media format: png, svg, text etc."),
+			mcp.Description("Output media format: svg, png, text etc."),
 			mcp.Enum(model.SupportedOutputFormats...),
-			mcp.DefaultString("png"),
+			mcp.DefaultString("svg"),
 		),
 		mcp.WithToolAnnotation(mcp.ToolAnnotation{
 			Title:           "Generate diagram image from source",
@@ -100,16 +100,18 @@ func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 				},
 			}, nil
 		case model.SVG:
-			minifiedSVG, err := svgconv.MinifySVG(string(result.ImageContent))
-			if err != nil {
-				minifiedSVG = string(result.ImageContent)
+			// Claude Desktop rejects image content blocks with image/svg+xml
+			// (only raster formats are supported), so SVG goes back as text,
+			// normalized so it renders inline on both light and dark themes.
+			svgOut := svgconv.NormalizeForInline(string(result.ImageContent))
+			if minified, err := svgconv.MinifySVG(svgOut); err == nil {
+				svgOut = minified
 			}
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.ImageContent{
-						Type:     "image",
-						Data:     base64.StdEncoding.EncodeToString([]byte(minifiedSVG)),
-						MIMEType: result.MIMEType,
+					mcp.TextContent{
+						Type: "text",
+						Text: svgOut,
 					},
 				},
 			}, nil
