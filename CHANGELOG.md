@@ -1,4 +1,4 @@
-## [Unreleased]
+## [v3.0.0] - 2026-08-15
 
 ### Changed
 - **Breaking:** `generate_diagram` with `format=svg` now returns the SVG markup as a text content block instead of an `image/svg+xml` image block. Claude Desktop (the Anthropic API) accepts only raster formats in image blocks, so the previous shape always failed with "unsupported format"; clients that render SVG image blocks now receive markup text instead.
