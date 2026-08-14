@@ -19,6 +19,12 @@ import (
 // The tool schema advertises the same value via mcp.DefaultNumber.
 const defaultDPI = 150
 
+// maxInlineSVGBytes caps how much SVG markup generate_diagram returns as a
+// text block. Unlike an image block, text enters the model's context as
+// tokens, and a large Graphviz or C4 render can reach hundreds of KB; past
+// this limit the tool points the caller at the URL or PNG alternatives.
+const maxInlineSVGBytes = 100 * 1024
+
 // parseDiagramArgs validates the shared tool arguments and returns them
 // normalized to lowercase (except source). A non-nil errResult must be
 // returned to the client as-is.
@@ -50,7 +56,7 @@ func parseDiagramArgs(req mcp.CallToolRequest, needsFormat bool) (diagramType, s
 
 func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 	tool := mcp.NewTool("generate_diagram",
-		mcp.WithDescription("Generate a diagram image and URL from textual code using Kroki."),
+		mcp.WithDescription("Generate a diagram from textual code using Kroki. Returns SVG markup as text (default, renders inline in chat) or a PNG image."),
 		mcp.WithString("diagramType",
 			mcp.Required(),
 			mcp.Description("The diagram code syntax type (e.g., plantuml, mermaid, graphviz)"),
@@ -62,9 +68,9 @@ func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 		),
 		mcp.WithString("format",
 			mcp.Required(),
-			mcp.Description("Output media format: png, svg, text etc."),
+			mcp.Description("Output media format: svg or png."),
 			mcp.Enum(model.SupportedOutputFormats...),
-			mcp.DefaultString("png"),
+			mcp.DefaultString("svg"),
 		),
 		mcp.WithToolAnnotation(mcp.ToolAnnotation{
 			Title:           "Generate diagram image from source",
@@ -100,16 +106,23 @@ func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 				},
 			}, nil
 		case model.SVG:
-			minifiedSVG, err := svgconv.MinifySVG(string(result.ImageContent))
-			if err != nil {
-				minifiedSVG = string(result.ImageContent)
+			// Claude Desktop rejects image content blocks with image/svg+xml
+			// (only raster formats are supported), so SVG goes back as text,
+			// normalized so it renders inline on both light and dark themes.
+			svgOut := svgconv.NormalizeForInline(string(result.ImageContent))
+			if minified, err := svgconv.MinifySVG(svgOut); err == nil {
+				svgOut = minified
+			}
+			if len(svgOut) > maxInlineSVGBytes {
+				slog.Error("Rendered SVG too large to return inline", "bytes", len(svgOut))
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"rendered SVG is %d bytes, too large to return inline; use get_diagram_url for a link or generate_png_diagram_with_custom_dpi for an image instead", len(svgOut))), nil
 			}
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.ImageContent{
-						Type:     "image",
-						Data:     base64.StdEncoding.EncodeToString([]byte(minifiedSVG)),
-						MIMEType: result.MIMEType,
+					mcp.TextContent{
+						Type: "text",
+						Text: svgOut,
 					},
 				},
 			}, nil
@@ -133,7 +146,7 @@ func (s *KrokiMCPServer) RegisterGetDiagramURLTool() {
 		),
 		mcp.WithString("format",
 			mcp.Required(),
-			mcp.Description("Output media format: png, svg, text etc."),
+			mcp.Description("Output media format: png or svg."),
 			mcp.Enum(model.SupportedOutputFormats...),
 			mcp.DefaultString("png"),
 		),

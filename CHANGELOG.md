@@ -1,10 +1,15 @@
-## [Unreleased]
+## [v3.0.0] - 2026-08-15
 
 ### Changed
+- **Breaking:** `generate_diagram` with `format=svg` now returns the SVG markup as a text content block instead of an `image/svg+xml` image block. Claude Desktop (the Anthropic API) accepts only raster formats in image blocks, so the previous shape always failed with "unsupported format"; clients that render SVG image blocks now receive markup text instead.
+- **Breaking:** the advertised default for `generate_diagram`'s `format` argument changed from `png` to `svg`, so callers that omit it now get the text/SVG path.
+- SVG output is normalized for inline chat rendering before being returned: the root element's background and fixed-size style declarations (including Mermaid's `max-width`) are stripped, the fixed `width` becomes `width="100%"` with a `viewBox` (synthesized from the pixel dimensions when missing or invalid) and `style="height:auto"` (the pixel `height` attribute is kept as an intrinsic-size fallback), and `preserveAspectRatio` is dropped in favor of the proportional default. Only the root tag is rewritten: this covers PlantUML-style root backgrounds; backgrounds painted inside the body (Graphviz's canvas polygon, Mermaid's embedded `<style>` rules) are left as-is.
+- `generate_diagram` returns an error instead of inline SVG when the normalized markup exceeds 100 KB, pointing the caller at `get_diagram_url` or `generate_png_diagram_with_custom_dpi`, since text output is billed as model context tokens.
 - Upgraded `github.com/mark3labs/mcp-go` from v0.25.0 to v0.58.0 (52 releases), migrating to the typed argument accessors API in place of raw `Arguments` map access.
 - Raised the required Go toolchain to 1.25.5, updating `go.mod`, CI (`actions/setup-go`), and the Docker builder image accordingly.
 
 ### Fixed
+- Tool descriptions for the `format` argument no longer advertise `text`, which the schema enum and validation reject; they now list exactly `svg` and `png`.
 - `generate_png_diagram_with_custom_dpi` now honors its declared default DPI of 150 when `dpi` is omitted, rejects a wrong-typed `dpi` instead of silently falling back to the default, and enforces a valid range of 72–300 consistently across the guard, the error message, and the parameter schema.
 - Stdio server startup/runtime errors are now logged and cause a non-zero exit, except for a graceful SIGTERM/SIGINT shutdown (which surfaces as `context.Canceled` and now exits cleanly).
 - Tool annotations are now declared on all three tools (`generate_diagram`, `get_diagram_url`, `generate_png_diagram_with_custom_dpi`) as read-only, non-destructive, idempotent, open-world; `get_diagram_url` previously advertised a self-contradictory `idempotentHint: false`, and `destructiveHint: false` was dropped from the wire due to `omitempty` on a plain bool.
