@@ -5,9 +5,12 @@
 - Raised the required Go toolchain to 1.25.5, updating `go.mod`, CI (`actions/setup-go`), and the Docker builder image accordingly.
 
 ### Fixed
-- `generate_png_diagram_with_custom_dpi` now honors its declared default DPI of 150 when `dpi` is omitted, instead of erroring.
-- Stdio server startup/runtime errors are now logged and cause a non-zero exit instead of being silently dropped.
-- `get_diagram_url` tool annotations now correctly advertise the tool as non-destructive; `destructiveHint: false` was previously dropped from the wire due to `omitempty` on a plain bool.
+- `generate_png_diagram_with_custom_dpi` now honors its declared default DPI of 150 when `dpi` is omitted, rejects a wrong-typed `dpi` instead of silently falling back to the default, and enforces a valid range of 72–300 consistently across the guard, the error message, and the parameter schema.
+- Stdio server startup/runtime errors are now logged and cause a non-zero exit, except for a graceful SIGTERM/SIGINT shutdown (which surfaces as `context.Canceled` and now exits cleanly).
+- Tool annotations are now declared on all three tools (`generate_diagram`, `get_diagram_url`, `generate_png_diagram_with_custom_dpi`) as read-only, non-destructive, idempotent, open-world; `get_diagram_url` previously advertised a self-contradictory `idempotentHint: false`, and `destructiveHint: false` was dropped from the wire due to `omitempty` on a plain bool.
+- Mixed-case `diagramType` and `format` arguments are now normalized to lowercase before being forwarded to Kroki, instead of being validated case-insensitively but forwarded raw.
+- Corrected the invalid-format error message to list the actually supported formats: `format is required and must be one of: png, svg`.
+- `svgconv.Convert` now propagates PNG/JPEG encoding errors instead of discarding them and returning a truncated or corrupt image as success.
 
 ## [v2.0.0] - 2025-05-05
 

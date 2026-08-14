@@ -32,8 +32,7 @@ func Convert(out io.Writer, svg string, opt Options) error {
 	switch opt.Format {
 	case PNG:
 		writer := renderers.PNG(opts...)
-		writer(out, c)
-		return nil
+		return writer(out, c)
 	case JPEG:
 		ctx := canvas.NewContext(c)
 		// Set the background color to white
@@ -47,8 +46,7 @@ func Convert(out io.Writer, svg string, opt Options) error {
 
 		opts = append(opts, &jpeg.Options{Quality: 90})
 		writer := renderers.JPEG(opts...)
-		writer(out, c)
-		return nil
+		return writer(out, c)
 	default:
 		return fmt.Errorf("unsupported format: %s", opt.Format)
 	}
