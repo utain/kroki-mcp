@@ -1,3 +1,14 @@
+## [Unreleased]
+
+### Changed
+- Upgraded `github.com/mark3labs/mcp-go` from v0.25.0 to v0.58.0 (52 releases), migrating to the typed argument accessors API in place of raw `Arguments` map access.
+- Raised the required Go toolchain to 1.25.5, updating `go.mod`, CI (`actions/setup-go`), and the Docker builder image accordingly.
+
+### Fixed
+- `generate_png_diagram_with_custom_dpi` now honors its declared default DPI of 150 when `dpi` is omitted, instead of erroring.
+- Stdio server startup/runtime errors are now logged and cause a non-zero exit instead of being silently dropped.
+- `get_diagram_url` tool annotations now correctly advertise the tool as non-destructive; `destructiveHint: false` was previously dropped from the wire due to `omitempty` on a plain bool.
+
 ## [v2.0.0] - 2025-05-05
 
 ### Added

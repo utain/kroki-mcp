@@ -40,7 +40,10 @@ func main() {
 	switch cfg.ServerMode {
 	case "stdio":
 		logger.Info("STDIO mode: reading diagram type and source from stdin")
-		server.ServeStdio(kroki.Handler())
+		if err := server.ServeStdio(kroki.Handler()); err != nil {
+			logger.Error("STDIO server error", "error", err)
+			os.Exit(1)
+		}
 	default:
 		logger.Info("SSE mode: starting SSE server")
 		sseServer := server.NewSSEServer(kroki.Handler())

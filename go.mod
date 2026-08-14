@@ -1,9 +1,9 @@
 module github.com/utain/kroki-mcp
 
-go 1.24.2
+go 1.25.5
 
 require (
-	github.com/mark3labs/mcp-go v0.25.0
+	github.com/mark3labs/mcp-go v0.58.0
 	github.com/spf13/pflag v1.0.6
 	github.com/tdewolff/canvas v0.0.0-20250430140454-4197cdeab172
 	github.com/tdewolff/minify/v2 v2.23.3
@@ -24,8 +24,10 @@ require (
 	github.com/go-fonts/latin-modern v0.3.3 // indirect
 	github.com/go-text/typesetting v0.3.0 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/kolesa-team/go-webp v1.0.5 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/srwiley/scanx v0.0.0-20190309010443-e94503791388 // indirect

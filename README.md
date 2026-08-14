@@ -1,7 +1,7 @@
 # Kroki-MCP
 
 [![CI](https://github.com/utain/kroki-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/utain/kroki-mcp/actions/workflows/ci.yml)
-[![Go Version](https://img.shields.io/badge/go-1.22-blue)](https://golang.org/dl/)
+[![Go Version](https://img.shields.io/badge/go-1.25.5-blue)](https://golang.org/dl/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 <!-- Uncomment and update if Docker image is published
 [![Docker Pulls](https://img.shields.io/docker/pulls/utain/kroki-mcp)](https://hub.docker.com/r/utain/kroki-mcp)
