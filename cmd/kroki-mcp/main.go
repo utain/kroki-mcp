@@ -19,7 +19,7 @@ func main() {
 	pflag.StringVarP(&cfg.ServerHost, "host", "h", "localhost", "Server host")
 	pflag.IntVarP(&cfg.ServerPort, "port", "p", 5090, "Server port")
 	pflag.StringVarP(&cfg.ServerMode, "mode", "m", "stdio", "Operation mode: sse or stdio (default)")
-	pflag.StringVarP(&cfg.OutputFormat, "format", "f", "png", "Output format: png, svg, jpeg, pdf")
+	pflag.StringVarP(&cfg.OutputFormat, "format", "f", "png", "Output format: png, svg")
 	pflag.StringVar(&cfg.KrokiHost, "kroki-host", "https://kroki.io", "Kroki server host URL")
 	pflag.StringVar(&cfg.LogLevel, "log-level", "info", "Log level: debug, info, warn, error")
 	pflag.StringVar(&cfg.LogFormat, "log-format", "text", "Log format: text or json")

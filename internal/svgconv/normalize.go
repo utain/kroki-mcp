@@ -1,142 +1,266 @@
 package svgconv
 
 import (
+	"encoding/xml"
 	"fmt"
-	"regexp"
+	"math"
 	"strconv"
 	"strings"
-)
-
-var (
-	rootSVGTagRe = regexp.MustCompile(`(?is)<svg\b[^>]*>`)
-	svgAttrRe    = regexp.MustCompile(`([^\s=/>"']+)\s*=\s*("[^"]*"|'[^']*')`)
 )
 
 // NormalizeForInline rewrites the root <svg> tag of a Kroki-rendered diagram
 // so it displays cleanly when embedded inline in a chat card:
 //
-//   - the style attribute loses its hardcoded background and fixed pixel
-//     width/height, so the page background (light or dark) shows through and
-//     cannot override the scalable sizing below;
-//   - the fixed width/height attributes become width="100%" with a viewBox
-//     (synthesized from the old width/height when Kroki omitted one), so the
-//     diagram scales to its container;
+//   - the root style attribute loses its background and fixed-size
+//     declarations (width/height and the min-/max- variants Mermaid uses), so
+//     they cannot paint over the page theme or override the scalable sizing
+//     below;
+//   - the fixed width attribute becomes width="100%" with a viewBox
+//     (synthesized from the old width/height when Kroki omitted one) and a
+//     style of height:auto, so the diagram scales to its container while the
+//     retained height attribute keeps an intrinsic size for renderers that
+//     ignore CSS;
 //   - preserveAspectRatio is dropped, restoring the SVG default of
 //     "xMidYMid meet" so scaling keeps the aspect ratio.
 //
-// Shape-level fills and strokes are deliberately left untouched: re-theming
-// every element is a lossy transform, while a transparent, proportionally
-// scaled diagram is legible on both themes as-is. The rewrite is best-effort
-// and only touches the root tag; input without a recognizable root <svg> tag,
-// or without both a viewBox and parseable dimensions to derive one from, keeps
-// its original sizing.
+// Only the root tag is rewritten. That removes the background PlantUML-style
+// output carries on the root element; backgrounds painted inside the body
+// (Graphviz's canvas polygon, Mermaid's embedded <style> rules) are out of
+// scope, as is re-theming shape-level fills and strokes — those are lossy
+// transforms, while a proportionally scaled diagram is legible on both themes
+// as-is. The rewrite is best-effort: input without a well-formed root <svg>
+// tag is returned unchanged, and input without a valid viewBox or positive
+// pixel dimensions to derive one from keeps its original sizing.
 func NormalizeForInline(in string) string {
-	loc := rootSVGTagRe.FindStringIndex(in)
-	if loc == nil {
+	start, end, name, rawAttrs, ok := locateRootSVGTag(in)
+	if !ok {
 		return in
 	}
-	tag := in[loc[0]:loc[1]]
-	selfClosing := strings.HasSuffix(tag, "/>")
+	selfClosing := strings.HasSuffix(strings.TrimSpace(in[start:end]), "/>")
 
-	type attr struct{ name, value string }
-	var attrs []attr
-	for _, m := range svgAttrRe.FindAllStringSubmatch(tag, -1) {
-		attrs = append(attrs, attr{name: m[1], value: m[2][1 : len(m[2])-1]})
-	}
-
-	get := func(name string) (string, bool) {
-		for _, a := range attrs {
-			if strings.EqualFold(a.name, name) {
-				return a.value, true
+	get := func(attrName string) (string, bool) {
+		for _, a := range rawAttrs {
+			if a.Name.Space == "" && strings.EqualFold(a.Name.Local, attrName) {
+				return a.Value, true
 			}
 		}
 		return "", false
 	}
 
-	_, hasViewBox := get("viewBox")
+	viewBox, hasViewBoxAttr := get("viewBox")
+	viewBoxOK := hasViewBoxAttr && validViewBox(viewBox)
 	width, hasWidth := get("width")
 	height, hasHeight := get("height")
+	_, hasStyle := get("style")
 
 	synthViewBox := ""
-	if !hasViewBox && hasWidth && hasHeight {
+	if !viewBoxOK && hasWidth && hasHeight {
 		w, wOK := parseSVGLength(width)
 		h, hOK := parseSVGLength(height)
 		if wOK && hOK {
 			synthViewBox = fmt.Sprintf("0 0 %s %s", w, h)
 		}
 	}
-	scalable := hasViewBox || synthViewBox != ""
+	scalable := viewBoxOK || synthViewBox != ""
 
-	out := make([]attr, 0, len(attrs)+1)
-	for _, a := range attrs {
-		switch strings.ToLower(a.name) {
+	out := make([]xml.Attr, 0, len(rawAttrs)+2)
+	for _, a := range rawAttrs {
+		if a.Name.Space != "" {
+			out = append(out, a)
+			continue
+		}
+		switch strings.ToLower(a.Name.Local) {
 		case "style":
-			if v := cleanRootStyle(a.value); v != "" {
-				out = append(out, attr{a.name, v})
+			v := cleanRootStyle(a.Value)
+			if scalable {
+				v = appendStyleDeclaration(v, "height:auto")
+			}
+			if v != "" {
+				a.Value = v
+				out = append(out, a)
 			}
 		case "preserveaspectratio":
 			// Dropped: the SVG default is "xMidYMid meet".
 		case "width":
 			if scalable {
-				a.value = "100%"
+				a.Value = "100%"
 			}
 			out = append(out, a)
-		case "height":
-			if !scalable {
-				out = append(out, a)
+		case "viewbox":
+			// An unusable viewBox (empty, malformed, non-positive size) is
+			// replaced when width/height allow synthesizing one; otherwise
+			// the sizing is not scalable and everything stays as it was.
+			if !viewBoxOK && synthViewBox != "" {
+				a.Value = synthViewBox
 			}
+			out = append(out, a)
 		default:
 			out = append(out, a)
 		}
 	}
-	if synthViewBox != "" {
-		out = append(out, attr{"viewBox", synthViewBox})
+	if synthViewBox != "" && !hasViewBoxAttr {
+		out = append(out, xml.Attr{Name: xml.Name{Local: "viewBox"}, Value: synthViewBox})
 	}
 	if scalable && !hasWidth {
-		out = append(out, attr{"width", "100%"})
+		out = append(out, xml.Attr{Name: xml.Name{Local: "width"}, Value: "100%"})
+	}
+	if scalable && !hasStyle {
+		out = append(out, xml.Attr{Name: xml.Name{Local: "style"}, Value: "height:auto"})
 	}
 
 	var b strings.Builder
-	b.WriteString("<svg")
+	b.WriteString("<")
+	b.WriteString(qualifiedName(name))
 	for _, a := range out {
 		b.WriteString(" ")
-		b.WriteString(a.name)
+		b.WriteString(qualifiedName(a.Name))
 		b.WriteString(`="`)
-		b.WriteString(strings.ReplaceAll(a.value, `"`, "&quot;"))
+		b.WriteString(escapeAttrValue(a.Value))
 		b.WriteString(`"`)
 	}
 	if selfClosing {
 		b.WriteString("/")
 	}
 	b.WriteString(">")
-	return in[:loc[0]] + b.String() + in[loc[1]:]
+	return in[:start] + b.String() + in[end:]
+}
+
+// locateRootSVGTag finds the byte range [start, end) of the root <svg> start
+// tag and returns its name and attributes as parsed by encoding/xml, so
+// quoting and entities are handled correctly. The XML prolog, doctype,
+// comments (Graphviz prefixes its output with several), and whitespace before
+// the root element are skipped; anything other than a root <svg> element
+// reports !ok.
+func locateRootSVGTag(in string) (start, end int, name xml.Name, attrs []xml.Attr, ok bool) {
+	d := xml.NewDecoder(strings.NewReader(in))
+	for {
+		tokenStart := d.InputOffset()
+		tok, err := d.RawToken()
+		if err != nil {
+			return 0, 0, xml.Name{}, nil, false
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if !strings.EqualFold(t.Name.Local, "svg") {
+				return 0, 0, xml.Name{}, nil, false
+			}
+			return int(tokenStart), int(d.InputOffset()), t.Name, t.Attr, true
+		case xml.ProcInst, xml.Comment, xml.Directive, xml.CharData:
+			// Prolog, doctype, comments, and inter-token whitespace.
+		default:
+			return 0, 0, xml.Name{}, nil, false
+		}
+	}
+}
+
+// qualifiedName renders an xml.Name the way RawToken read it: RawToken does
+// not resolve namespaces, so Space holds the literal prefix (if any).
+func qualifiedName(n xml.Name) string {
+	if n.Space != "" {
+		return n.Space + ":" + n.Local
+	}
+	return n.Local
+}
+
+// escapeAttrValue re-escapes an attribute value that the tokenizer has
+// entity-decoded, for emission inside double quotes.
+var attrEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", `"`, "&quot;")
+
+func escapeAttrValue(v string) string {
+	return attrEscaper.Replace(v)
 }
 
 // parseSVGLength accepts the plain-number and px forms Kroki emits for
-// width/height ("198", "198px", "197.5"). Anything else (%, em, pt) is not a
-// safe basis for a synthesized viewBox.
+// width/height ("198", "198px", "197.5"). The value must be a finite,
+// strictly positive number: other units (%, em, pt) are not a safe basis for
+// a synthesized viewBox, and NaN/Inf/non-positive values would make it
+// invalid (SVG 1.1 §7.7: such an element must not be rendered).
 func parseSVGLength(v string) (string, bool) {
 	n := strings.TrimSuffix(strings.TrimSpace(v), "px")
-	if _, err := strconv.ParseFloat(n, 64); err != nil {
+	f, err := strconv.ParseFloat(n, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f <= 0 {
 		return "", false
 	}
 	return n, true
 }
 
+// validViewBox reports whether v is a usable viewBox: four finite numbers
+// (comma- or whitespace-separated) with a strictly positive width and height.
+func validViewBox(v string) bool {
+	fields := strings.FieldsFunc(v, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	})
+	if len(fields) != 4 {
+		return false
+	}
+	nums := make([]float64, 4)
+	for i, field := range fields {
+		f, err := strconv.ParseFloat(field, 64)
+		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+			return false
+		}
+		nums[i] = f
+	}
+	return nums[2] > 0 && nums[3] > 0
+}
+
 // cleanRootStyle drops the background and fixed-size declarations Kroki puts
-// on the root element's style attribute, keeping any other declarations.
+// on the root element's style attribute (PlantUML uses width/height, Mermaid
+// max-width), keeping any other declarations.
 func cleanRootStyle(style string) string {
 	var kept []string
-	for _, decl := range strings.Split(style, ";") {
+	for _, decl := range splitStyleDeclarations(style) {
 		prop, _, found := strings.Cut(decl, ":")
 		if !found {
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(prop)) {
-		case "background", "background-color", "width", "height":
+		case "background", "background-color", "background-image",
+			"width", "height", "max-width", "min-width", "max-height", "min-height":
 		default:
 			kept = append(kept, strings.TrimSpace(decl))
 		}
 	}
 	return strings.Join(kept, ";")
+}
+
+// splitStyleDeclarations splits a style attribute value on the ';' between
+// declarations, leaving semicolons inside url(...) or quoted strings alone —
+// a data: URI ("url(data:image/png;base64,...)") legally contains them.
+func splitStyleDeclarations(style string) []string {
+	var (
+		decls []string
+		start int
+		depth int
+		quote rune
+	)
+	for i, r := range style {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == '(':
+			depth++
+		case r == ')':
+			if depth > 0 {
+				depth--
+			}
+		case r == ';' && depth == 0:
+			decls = append(decls, style[start:i])
+			start = i + 1
+		}
+	}
+	return append(decls, style[start:])
+}
+
+// appendStyleDeclaration appends decl to a (possibly empty) sequence of style
+// declarations.
+func appendStyleDeclaration(style, decl string) string {
+	if style == "" {
+		return decl
+	}
+	return style + ";" + decl
 }

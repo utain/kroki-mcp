@@ -5,13 +5,14 @@ import (
 	"github.com/tdewolff/minify/v2/svg"
 )
 
-func MinifySVG(in string) (string, error) {
+// minifier is shared across calls: minify.M is stateless after registration
+// and safe for concurrent use.
+var minifier = func() *minify.M {
 	m := minify.New()
 	m.AddFunc("image/svg+xml", svg.Minify)
+	return m
+}()
 
-	out, err := m.String("image/svg+xml", in)
-	if err != nil {
-		return "", err
-	}
-	return out, nil
+func MinifySVG(in string) (string, error) {
+	return minifier.String("image/svg+xml", in)
 }

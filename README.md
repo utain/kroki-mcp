@@ -14,7 +14,7 @@ Kroki-MCP is a command-line tool and MCP integration for converting textual diag
 - **Modes:**  
   - **SSE:** Streams results using Server-Sent Events.  
   - **STDIO (default):** Reads diagram code from stdin and outputs to stdout.
-- **Output Formats:** Supports `png` (default), `svg`, `jpeg`, and `pdf`.
+- **Output Formats:** Supports `svg` (default) and `png`. SVG is returned as markup text, normalized to scale and stay transparent when rendered inline in chat (e.g., Claude Desktop); PNG is returned as an image.
 - **Kroki Server:** Configurable backend host (default: `https://kroki.io`).
 - **Extensible:** Easily add support for more diagram types and output formats.
 - **MCP Integration:** Exposes diagram conversion as an MCP tool using [github.com/mark3labs/mcp-go](https://github.com/mark3labs/mcp-go).
@@ -29,7 +29,7 @@ kroki-mcp
 kroki-mcp --format svg
 
 # Use STDIO mode
-kroki-mcp --mode stdio --format pdf
+kroki-mcp --mode stdio --format svg
 
 # Specify a custom Kroki server
 kroki-mcp --kroki-host http://localhost:8000
@@ -42,7 +42,7 @@ kroki-mcp --kroki-host http://localhost:8000
 | `--host`, `-h`     | Server host address                         | string  | `localhost`        |
 | `--port`, `-p`     | Server port                                 | int     | `5090`             |
 | `--mode`, `-m`     | Operation mode (`sse` or `stdio`)           | string  | `stdio`            |
-| `--format`, `-f`   | Output format (`png`, `svg`, `jpeg`, `pdf`) | string  | `png`              |
+| `--format`, `-f`   | Output format (`png`, `svg`)                | string  | `png`              |
 | `--kroki-host`     | Kroki server URL                            | string  | `https://kroki.io` |
 | `--log-level`      | Log level (`debug`, `info`, `warn`, `error`)| string  | `info`             |
 | `--log-format`     | Log format (`text` or `json`)               | string  | `text`             |

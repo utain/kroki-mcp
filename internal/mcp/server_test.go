@@ -661,19 +661,32 @@ func TestCallTool_GenerateDiagram_SVGNormalizedForInline(t *testing.T) {
 	}
 
 	svg := firstTextContent(t, result)
-	if !strings.Contains(svg, "<svg") {
+	tagStart := strings.Index(svg, "<svg")
+	if tagStart < 0 {
 		t.Fatalf("result does not look like SVG: %q", svg)
 	}
-	if strings.Contains(svg, "background") {
-		t.Errorf("returned SVG still has a hardcoded background: %q", svg)
+	tagLen := strings.Index(svg[tagStart:], ">")
+	if tagLen < 0 {
+		t.Fatalf("unterminated root tag: %q", svg)
 	}
-	if !strings.Contains(svg, `width="100%"`) {
-		t.Errorf("returned SVG missing width=\"100%%\": %q", svg)
+	// The mechanism under test rewrites the root tag only, so the assertions
+	// target it: body content may legitimately contain e.g. the word
+	// "background", and a body-painted background would not be caught here.
+	root := svg[tagStart : tagStart+tagLen+1]
+	if strings.Contains(root, "background") {
+		t.Errorf("root tag still has a hardcoded background: %q", root)
 	}
-	if !strings.Contains(svg, `viewBox="0 0 198 210"`) {
-		t.Errorf("returned SVG missing its viewBox: %q", svg)
+	if !strings.Contains(root, `width="100%"`) {
+		t.Errorf("root tag missing width=\"100%%\": %q", root)
 	}
-	if strings.Contains(svg, `preserveAspectRatio="none"`) {
-		t.Errorf("returned SVG still disables proportional scaling: %q", svg)
+	if !strings.Contains(root, `viewBox="0 0 198 210"`) {
+		t.Errorf("root tag missing its viewBox: %q", root)
+	}
+	if strings.Contains(root, `preserveAspectRatio="none"`) {
+		t.Errorf("root tag still disables proportional scaling: %q", root)
+	}
+	// Shape-level colors pass through untouched.
+	if !strings.Contains(svg, "#E2E2F0") || !strings.Contains(svg, "#181818") {
+		t.Errorf("shape-level colors were modified: %q", svg)
 	}
 }
