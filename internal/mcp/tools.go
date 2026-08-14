@@ -14,6 +14,16 @@ import (
 	"github.com/utain/kroki-mcp/internal/svgconv"
 )
 
+// DPI bounds for generate_png_diagram_with_custom_dpi. minDPI is not merely a
+// stylistic floor: below roughly 72 the rasterizer panics with "raster size is
+// zero, increase resolution" on small diagrams. Kept in one place so the JSON
+// schema, the validation guard and the error message cannot drift apart.
+const (
+	defaultDPI = 150
+	minDPI     = 72
+	maxDPI     = 300
+)
+
 func (s *KrokiMCPServer) RegisterGenerateDiagramTool() {
 	tool := mcp.NewTool("generate_diagram",
 		mcp.WithDescription("Generate a diagram image and URL from textual code using Kroki."),
@@ -167,8 +177,8 @@ func (s *KrokiMCPServer) RegisterGeneratePNGDiagramWithCustomDPITool() {
 			mcp.Description("The textual diagram source code"),
 		),
 		mcp.WithNumber("dpi",
-			mcp.Description("Output dots per inch (DPI) for the PNG image from 72 to 240"),
-			mcp.DefaultNumber(150),
+			mcp.Description(fmt.Sprintf("Output dots per inch (DPI) for the PNG image from %d to %d", minDPI, maxDPI)),
+			mcp.DefaultNumber(defaultDPI),
 		),
 	)
 
@@ -185,10 +195,21 @@ func (s *KrokiMCPServer) RegisterGeneratePNGDiagramWithCustomDPITool() {
 			return mcp.NewToolResultError("source is required and must be a non-empty string"), nil
 		}
 
-		dpi := req.GetFloat("dpi", 150)
-		if dpi < 1 || dpi > 300 {
+		// GetFloat would silently fall back to the default for a wrong-typed
+		// argument, so only default when dpi is genuinely absent and report a
+		// malformed value instead of discarding it.
+		dpi := float64(defaultDPI)
+		if raw, ok := req.GetArguments()["dpi"]; ok && raw != nil {
+			value, err := req.RequireFloat("dpi")
+			if err != nil {
+				slog.Error("Invalid DPI value", "dpi", raw, "error", err)
+				return mcp.NewToolResultError(fmt.Sprintf("dpi must be a number between %d and %d", minDPI, maxDPI)), nil
+			}
+			dpi = value
+		}
+		if dpi < minDPI || dpi > maxDPI {
 			slog.Error("Invalid DPI value", "dpi", dpi)
-			return mcp.NewToolResultError("DPI must be between 72 and 300"), nil
+			return mcp.NewToolResultError(fmt.Sprintf("DPI must be between %d and %d", minDPI, maxDPI)), nil
 		}
 
 		result, err := s.krokiClient.RenderDiagram(diagramType, source, model.OutputFormat(model.SVG))

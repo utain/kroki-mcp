@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -40,7 +42,9 @@ func main() {
 	switch cfg.ServerMode {
 	case "stdio":
 		logger.Info("STDIO mode: reading diagram type and source from stdin")
-		if err := server.ServeStdio(kroki.Handler()); err != nil {
+		// ServeStdio cancels its own context on SIGINT/SIGTERM and surfaces that
+		// as context.Canceled, so only treat anything else as a real failure.
+		if err := server.ServeStdio(kroki.Handler()); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("STDIO server error", "error", err)
 			os.Exit(1)
 		}

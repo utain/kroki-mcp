@@ -39,7 +39,31 @@ func newGuardedKrokiHost(t *testing.T) string {
 // returned by pure-encoding tools such as get_diagram_url.
 func newTestServer(t *testing.T) (*server.MCPServer, string) {
 	t.Helper()
-	host := newGuardedKrokiHost(t)
+	return newTestServerWithHost(t, newGuardedKrokiHost(t))
+}
+
+// stubSVG is a minimal but real SVG with non-zero dimensions, enough for
+// canvas.ParseSVG to produce a canvas that rasterizes without error.
+const stubSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="60" viewBox="0 0 100 60">` +
+	`<rect x="5" y="5" width="90" height="50" fill="none" stroke="black"/></svg>`
+
+// newStubKrokiHost returns a URL for a local httptest server that answers
+// every request with stubSVG. It is the counterpart to newGuardedKrokiHost,
+// for tests that need to exercise a render path end to end rather than stop
+// at validation.
+func newStubKrokiHost(t *testing.T) string {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		_, _ = w.Write([]byte(stubSVG))
+	}))
+	t.Cleanup(ts.Close)
+	return ts.URL
+}
+
+// newTestServerWithHost is newTestServer with an explicit Kroki host.
+func newTestServerWithHost(t *testing.T, host string) (*server.MCPServer, string) {
+	t.Helper()
 	cfg := &config.Config{KrokiHost: host}
 	krokiClient := kroki.NewKrokiClient(host)
 	s := NewKrokiMCPServer(cfg, krokiClient)
@@ -254,33 +278,100 @@ func TestCallTool_GenerateDiagram_ValidationErrors(t *testing.T) {
 	}
 }
 
-// 5 (continued). Validation error path for
-// generate_png_diagram_with_custom_dpi: dpi out of the allowed [1, 300]
-// range. This returns before RenderDiagram is called, so no network I/O
-// occurs.
-func TestCallTool_GeneratePNGDiagramWithCustomDPI_DPIOutOfRange(t *testing.T) {
+// 5 (continued). Rejected dpi arguments for
+// generate_png_diagram_with_custom_dpi. Each returns before RenderDiagram is
+// called, so no network I/O occurs. minDPI is a hard floor rather than a
+// stylistic one: below it the rasterizer panics on small diagrams, so the
+// dpi=71 case pins the bound that keeps that path unreachable. The
+// wrong-typed cases pin that a malformed argument is reported instead of
+// being silently replaced by the default.
+func TestCallTool_GeneratePNGDiagramWithCustomDPI_RejectedDPI(t *testing.T) {
 	mcpServer, _ := newTestServer(t)
 	c, _ := newInitializedClient(t, mcpServer)
 
-	req := mcp.CallToolRequest{}
-	req.Params.Name = "generate_png_diagram_with_custom_dpi"
-	req.Params.Arguments = map[string]any{
+	tests := []struct {
+		name    string
+		dpi     any
+		wantMsg string
+	}{
+		{name: "above maxDPI", dpi: 500, wantMsg: "DPI must be between 72 and 300"},
+		{name: "below minDPI", dpi: 71, wantMsg: "DPI must be between 72 and 300"},
+		{name: "unparsable string", dpi: "high", wantMsg: "dpi must be a number between 72 and 300"},
+		{name: "boolean", dpi: true, wantMsg: "dpi must be a number between 72 and 300"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := mcp.CallToolRequest{}
+			req.Params.Name = "generate_png_diagram_with_custom_dpi"
+			req.Params.Arguments = map[string]any{
+				"diagramType": "mermaid",
+				"source":      "graph TD; A-->B;",
+				"dpi":         tt.dpi,
+			}
+
+			result, err := c.CallTool(context.Background(), req)
+			if err != nil {
+				t.Fatalf("CallTool: %v", err)
+			}
+			if !result.IsError {
+				t.Fatalf("expected IsError result, got success: %s", firstTextContent(t, result))
+			}
+
+			if got := firstTextContent(t, result); got != tt.wantMsg {
+				t.Errorf("error message = %q, want %q", got, tt.wantMsg)
+			}
+		})
+	}
+}
+
+// 5 (continued). An omitted dpi must fall back to the declared default of
+// 150 rather than erroring or rendering at some other resolution. Asserted
+// by rendering twice against a stub Kroki host — once with dpi omitted, once
+// with dpi=150 explicitly — and requiring byte-identical PNG output, which
+// pins the effective default to the value the JSON schema advertises.
+func TestCallTool_GeneratePNGDiagramWithCustomDPI_OmittedDPIUsesDefault(t *testing.T) {
+	mcpServer, _ := newTestServerWithHost(t, newStubKrokiHost(t))
+	c, _ := newInitializedClient(t, mcpServer)
+
+	render := func(t *testing.T, args map[string]any) string {
+		t.Helper()
+		req := mcp.CallToolRequest{}
+		req.Params.Name = "generate_png_diagram_with_custom_dpi"
+		req.Params.Arguments = args
+
+		result, err := c.CallTool(context.Background(), req)
+		if err != nil {
+			t.Fatalf("CallTool: %v", err)
+		}
+		if result.IsError {
+			t.Fatalf("unexpected error result: %s", firstTextContent(t, result))
+		}
+		if len(result.Content) == 0 {
+			t.Fatalf("expected at least 1 content item, got 0")
+		}
+		image, ok := result.Content[0].(mcp.ImageContent)
+		if !ok {
+			t.Fatalf("expected content[0] to be mcp.ImageContent, got %T", result.Content[0])
+		}
+		if image.Data == "" {
+			t.Fatal("expected non-empty PNG data")
+		}
+		return image.Data
+	}
+
+	omitted := render(t, map[string]any{
 		"diagramType": "mermaid",
 		"source":      "graph TD; A-->B;",
-		"dpi":         500,
-	}
+	})
+	explicit := render(t, map[string]any{
+		"diagramType": "mermaid",
+		"source":      "graph TD; A-->B;",
+		"dpi":         150,
+	})
 
-	result, err := c.CallTool(context.Background(), req)
-	if err != nil {
-		t.Fatalf("CallTool: %v", err)
-	}
-	if !result.IsError {
-		t.Fatalf("expected IsError result, got success: %s", firstTextContent(t, result))
-	}
-
-	want := "DPI must be between 72 and 300"
-	if got := firstTextContent(t, result); got != want {
-		t.Errorf("error message = %q, want %q", got, want)
+	if omitted != explicit {
+		t.Error("omitted dpi did not render identically to an explicit dpi of 150")
 	}
 }
 

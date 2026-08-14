@@ -6,7 +6,8 @@
 
 ### Fixed
 - `generate_png_diagram_with_custom_dpi` now honors its declared default DPI of 150 when `dpi` is omitted, instead of erroring.
-- Stdio server startup/runtime errors are now logged and cause a non-zero exit instead of being silently dropped.
+- `generate_png_diagram_with_custom_dpi` now rejects a malformed `dpi` argument instead of silently rendering at the default, and enforces a lower bound of 72 — below roughly that value the rasterizer panicked on small diagrams. The JSON schema, the validation guard and the error message now share a single `[72, 300]` range.
+- Stdio server startup/runtime errors are now logged and cause a non-zero exit instead of being silently dropped. A signal-driven shutdown (SIGINT/SIGTERM) surfaces as `context.Canceled` and is still treated as a clean exit.
 - `get_diagram_url` tool annotations now correctly advertise the tool as non-destructive; `destructiveHint: false` was previously dropped from the wire due to `omitempty` on a plain bool.
 
 ## [v2.0.0] - 2025-05-05
